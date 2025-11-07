@@ -8,10 +8,44 @@ extends Node
 
 # 當「音樂師」拖放音軌時，會呼叫這個函式
 # GDD 14.0 規格
-func save_sample_to_db(audio_data: PackedByteArray, track_type: String, start_time: float, chapter: int):
-	print("【VibeTrackAPI】: 收到「音樂師」的儲存請求... (尚未實作)")
-	# TODO: 製作人 (B) 未來會在這裡填上 Supabase Storage 上傳 和 Database INSERT
-	pass
+func save_sample_to_db(audio_data: PackedByteArray, track_type: String, start_time: float, chapter: int) -> void:
+	print("【VibeTrackAPI】: 收到「音樂師」的儲存請求...")
+	
+	# 1. 檢查使用者登入狀態並取得 user_id
+	var user = SupabaseClient.supabase.auth.get_current_user()
+	if not user:
+		print("【VibeTrackAPI】錯誤：使用者未登入，無法儲存音檔。")
+		return
+	var user_id = user.id
+	
+	# 2. 取得 group_id (假設它儲存在 user_metadata)
+	# TODO: 這裡的 group_id 取得方式需要根據你的實際資料庫結構調整
+	var group_id = user.user_metadata.get("group_id", null)
+	if not group_id:
+		print("【VibeTrackAPI】錯誤：在 user_metadata 中找不到 group_id。")
+		return
+		
+	# 3. (GDD 14.0 規格) 呼叫 Supabase Function 進行 AI 處理並儲存
+	# 我們將原始音檔和所有參數傳給後端，讓後端完成 AI 處理、上傳 Storage、寫入 DB 的所有工作。
+	# [cite: 77-79, 100-101]
+	print("【VibeTrackAPI】: 正在呼叫 Supabase Function 'process-and-save-sample'...")
+	var function_task = SupabaseClient.supabase.functions.invoke(
+		"process-and-save-sample",
+		{
+			"audio_data_b64": Marshalls.raw_to_base64(audio_data), # 將 PackedByteArray 轉為 Base64 字串
+			"track_type": track_type,
+			"start_time": start_time,
+			"group_id": group_id,
+			"user_id": user_id,
+			"chapter": chapter
+		}
+	)
+	await function_task.completed
+	
+	if function_task.error:
+		print("【VibeTrackAPI】錯誤：呼叫 Function 失敗: ", function_task.error)
+	else:
+		print("【VibeTrackAPI】: Function 執行成功！音檔已處理並儲存至資料庫。")
 
 # 當「音樂師」的播放器需要歌曲資料時，會呼叫這個函式
 # [cite_start]GDD 14.0 規格 [cite: 87-88]

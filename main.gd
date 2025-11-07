@@ -277,7 +277,7 @@ func _on_staging_slot_gui_input(event: InputEvent):
 			var preview = Label.new()
 			preview.text = "♪"
 			set_drag_preview(preview)
-			drag(drag_data, preview)
+			get_viewport().gui_drag_and_drop(drag_data, preview, self)
 
 func _on_track_gui_input(event: InputEvent, track_node: Control):
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:

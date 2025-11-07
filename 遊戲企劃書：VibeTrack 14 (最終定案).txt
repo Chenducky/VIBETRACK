@@ -1,0 +1,152 @@
+﻿________________
+
+
+遊戲企劃書：VibeTrack 14.0 (最終定案)
+專案名稱： VibeTrack
+企劃書版本： 14.0
+核心概念： 一個 2-5 人的摯友群組 App，一個「Lo-fi 迷因音樂製造機」。
+Slogan (標語)： 您的朋友圈，就是一首歌。
+________________
+
+
+一、 專案總覽 (Project Overview)
+1. 核心問題 (The Problem)
+現今的社交媒體 (Instagram, TikTok) 充滿了「表演性」和「完美主義」，導致 Z 世代產生社交焦慮。他們渴望一種**「低壓力」、「真實」且「私密」**的連結方式，但現有的聊天工具又缺乏「共同創造」的樂趣。
+2. 我們的解決方案 (The Solution)
+VibeTrack 是一款**「遊戲化的社交 App」**。它不是一個複雜的音樂軟體，而是一個「共同的創意空間」。
+它讓 2-5 人的摯友群組，能將彼此最真實、最荒誕的「生活噪音」（例如：打嗝聲、貓叫、互嘴的髒話、打字聲）轉化為一首好聽又充滿共同回憶的 Lo-fi 歌曲。
+VibeTrack 的核心是「共同創作的樂趣」和「友情的數位紀錄」。
+________________
+
+
+二、 核心遊戲機制 (Core Gameplay Mechanics)
+這是 VibeTrack 的「每日」遊玩迴圈。
+1. 錄音 (Sampling)
+* 運作機制： 這是 VibeTrack 的核心限制。玩家每 15 分鐘可獲得一次「免費錄音」機會 (CD 冷卻)。
+* 製作方法 (Tech)：
+   * (Godot) 使用一個全域的 Timer 節點來倒數 15 分鐘。
+   * (Godot) 當 Timer 結束時，「錄音」Button 變為可點擊。
+   * (Godot) 點擊後，使用 AudioEffectRecord（我們在 Windows 上的方案）來錄製 3 秒的「Vibe 聲音」。
+2. 單一暫存槽 (Staging Slot) - (機制 #5)
+* 運作機制： 我們刪除了複雜的 5 槽系統。現在只有 1 個「暫存槽」。錄製完成的音檔會出現在這個槽位，等待玩家將它「拖曳」到音軌上。
+* 製作方法 (Tech)：
+   * (Godot) 這是一個 Control 節點，包含一個 TextureRect (顯示波形) 和一個 Label (顯示名稱)。
+   * (Godot) 當錄音結束後，腳本將 AudioStream 暫時存儲在一個變數中，並更新此 UI。
+3. 【新】編排 (Arranging) - (機制 #1, #3)
+* 運作機制： 這是遊戲的核心創意。
+   * 群組音軌 (Group Tracks)： 沒有「玩家專屬音軌」。整個群組共享三條「類型音軌」：
+      * 音軌 1：人聲 (Vocals)
+      * 音軌 2：節奏 (Rhythm)
+      * 音軌 3：音效 (Sound Effects / SFX)
+   * 塊狀陣列 (Grid-Based)： 「人聲軌」和「節奏軌」是**「塊狀陣列」**。玩家必須將錄音塊「拖入」到固定的格子中（例如第 1 格、第 2 格...）。
+   * 自由時間軸 (Timeline-Based)： 「音效軌」是**「自由時間軸」。玩家可以將音效塊在這一條音軌上任意滑動**，精確地放置在任意位置（例如 1.2 秒）。
+* 製作方法 (Tech)：
+   * (Godot) 「人聲軌」和「節奏軌」是 GridContainer 節點。
+   * (Godot) 「音效軌」是一個 Control 節點。
+   * (Godot) 實作 Godot 的「拖放」(Drag and Drop) 功能。暫存槽 節點在 _get_drag_data() 中傳遞音訊樣本。
+   * (Godot) 「音軌」節點實作 _can_drop_data() 和 _drop_data()。
+   * (Supabase) 放置成功後，INSERT 一筆新資料到 song_tracks 表，包含 track_type ('vocal', 'rhythm', 'sfx'), start_time (float), audio_url。
+4. 【新】音效軌重疊方案 (SFX Overlap Solution)
+* 運作機制：
+   * 允許重疊： 在「音效軌」上，玩家可以將多個音效塊重疊在一起。
+   * 視覺： 採用「動態圖層 (Dynamic Layering)」。對您（A 用戶）來說，您的音塊永遠在「最頂層」並 100% 不透明。朋友（B、C）重疊的音塊會顯示在下方、半透明、並有輕微位移。
+   * 互動： 「長按」(Long Press) 重疊區域，會彈出一個快捷選單，列出該區域「堆疊」的所有音效，允許玩家單獨點選聆聽。
+* 製作方法 (Tech)：
+   * (Godot) 在 _drop_data() 中，允許「音效軌」的 Rect2 發生 intersects() (相交)。
+   * (Godot) 在 _draw() 函數中，for 迴圈遍歷音塊時，先繪製所有「非本機用戶」的音塊（設為 50% 透明），最後才繪製「本機用戶」的音塊（100% 不透明）。
+   * (Godot) 「音效軌」Control 節點監聽 gui_input 事件。如果偵測到「長按」，則觸發一個 PopupMenu，並動態 add_item() 所有在該座標 Rect2 範圍內的音塊。
+5. AI 處理 (The "Magic")
+* 運作機制： 音檔一旦被「放置」到音軌上，AI 會立即對其進行處理。
+   * [節奏軌] 和 [人聲軌] 會強制使用 [節奏/鼓機] 和 [人聲/旋律] 模式。
+   * [音效軌] 會強制使用 [音效/原始] 模式。
+* 製作方法 (Tech)：
+   * (Godot) 當 _drop_data() 成功時，HTTPRequest 將 .wav 檔和**「音軌類型」**(track_type) 上傳到 Supabase。
+   * (Supabase Function - Python) 後端 AI 伺服器根據 track_type 執行對應的 AI 處理（librosa 切片, aubio Auto-tune, 或不處理）。
+   * (Supabase) AI 將處理後的「新音檔」存入 Storage，並將 URL 寫入 song_tracks 表。
+6. 播放 (Playback) - (機制 #4)
+* 運作機制：
+   * 總播放鈕： 播放「基礎 Beat」+ 所有三條「群組音軌」上的 AI 處理音檔。
+   * 單擊音檔塊： 只單獨播放那個「AI 處理過的聲音」（沒有 Beat），方便試聽。
+* 製作方法 (Tech)：
+   * (Godot) 一個主要的 PlaybackTimer（節拍器）會按照 BPM（例如 120 拍）前進。
+   * (Godot) Timer 每 1/16 秒（或更精確）觸發一次，檢查資料庫 song_tracks：「在目前這一拍，有哪些音檔塊需要被觸發？」
+   * (Godot) AudioStreamPlayer 池會 play() 這些音效。
+   * (Godot) 單擊音檔塊（Button 節點）的 pressed 訊號，只會 play() 該音效塊綁定的「AI 處理過的音檔」。
+________________
+
+
+三、 遊戲進程與經濟系統 (Progression & Economy)
+這是 VibeTrack 的「長期」遊玩迴圈。
+1. 群體經驗值 (Group XP) - (機制 #1)
+* 運作機制： 一個群組共享的升級系統。所有成員的貢獻都會加入同一個「群體 XP 池」。
+* 獲取途徑： 任何成員「放置樣本」、「解鎖樂章」、「完成歌曲」時，都會為群體增加 XP。
+* 獎勵： 「群體等級」提升時，群組錢包會獲得少量「Vibe 幣」，並且群組全員會獲得「電力」代幣。
+* 製作方法 (Tech)：
+   * (Supabase) 在 groups 資料表中加入 xp (int) 和 level (int) 欄位。
+   * (Supabase) 建立一個 PostgreSQL 函數，在玩家「放置樣本」（INSERT on song_tracks）時，自動觸發 (Trigger) 為 groups 表增加 XP。
+2. 電力 (Power) - (免費/遊戲獎勵貨幣)
+* 運作機制： 「電力」是一種稀有遊戲代幣，上限無限。
+* 用途： 跳過 15 分鐘的錄音 CD。
+* 獲取途徑 (不可購買)： 「電力」是純粹的遊戲獎勵，只能透過「新手引導」、「群體升級」或「完成歌曲」時獲得。
+* 製作方法 (Tech)：
+   * (Supabase) 在 group_members（或 users）資料表中加入 power_tokens (int) 欄位。
+   * (Godot) 「錄音」Button 會檢查 power_tokens > 0。如果為 true，則顯示一個「消耗 1 電力跳過 CD」的選項。
+3. Vibe 幣 (Vibe Coins) - (共享/付費貨幣)
+* 運作機制： 「Vibe 幣」是**「高級貨幣」。它 100% 歸群組共享**，存在於「群組錢包」中。
+* 獲取途徑：
+   * 真實貨幣購買： （見「商業模式」）
+   * 遊戲獎勵： 「群體升級」或「完成歌曲」時，可獲得少量的 Vibe 幣存入「群組錢包」。
+* 製作方法 (Tech)：
+   * (Supabase) 在 groups 資料表中加入 vibe_coins (int) 欄位。
+________________
+
+
+四、 宏觀遊戲迴圈 (Macro-Loop)
+1. 歌曲進程 (Song Progression) - (機制 #6)
+* 運作機制： 歌曲被分為 4 個樂章。群組必須達成目標（例如「在 [樂章 I] 中總共放置 20 個樣本」）才能解鎖 [樂章 II]。
+* 【新】章節鎖定： 一旦新章節（例如 [樂章 III]）解鎖，所有舊章節（[樂章 I] 和 [樂章 II]）將變為「不可編輯」，只能播放。
+* 製作方法 (Tech)：
+   * (Godot) 「群組音軌」(ScrollContainer) 的可滾動寬度，由資料庫中的「已解鎖樂章數」決定。
+   * (Godot) 在未解鎖的區域會顯示一個「鎖頭圖示」。
+   * (Godot) _drop_data() 函數會檢查「當前樂章」，如果玩家試圖拖曳到「已鎖定」的舊樂章，則拒絕放置。
+   * (Supabase) 在 weekly_songs 資料表中，儲存 current_chapter (int) 和 chapter_progress (int)。
+2. Vibe 商店 (The Vibe Store) - (Vibe 幣的出口)
+* 運作機制： 這是 App 內所有「群組共享商品」的購買中心。
+* 購買流程： 任何成員都可以「提議」購買，但必須透過「群組投票」（例如 5 人中有 3 人同意），才能**花費「群組 Vibe 幣」**來進行購買。
+* 販售商品：
+   * AI 效果器 (共享功能)： 範例： 購買「機器人聲線」效果器。一旦購買，群組中的「所有」成員都可以使用。
+   * 基礎 Beat 包 (共享音樂)： 範例： 購買「賽博龐克 Beat 包」。
+   * 唱片行裝飾品 (共享外觀)： 範例： 購買「黃金唱片封面」。
+* 製作方法 (Tech)：
+   * (Godot) BeatStore.tscn 顯示 store_items 資料表的商品。
+   * (Supabase) 玩家點擊「投票」，INSERT 一筆資料到 group_votes 表。
+   * (Supabase) 一個 PostgreSQL 函數會檢查 votes >= group_members / 2。如果達成，則自動扣除 vibe_coins 並將商品 ID 寫入 group_inventory 表。
+3. 唱片行 (The Record Store) - (機制 #7)
+* 運作機制： 一個全新的 App 頁面，作為群組的「獎盃室」。當一首歌曲所有樂章都完成後，會自動新增到「唱片行」中陳列。
+* 製作方法 (Tech)：
+   * (Godot) 一個全新的場景 RecordStore.tscn。
+   * (Supabase) INSERT 一筆新資料到 completed_songs 資料表中。
+   * (Godot) RecordStore.tscn 啟動時，會 SELECT completed_songs 資料表，並動態生成所有「唱片」UI。
+________________
+
+
+五、 商業模式 (Monetization)
+我們的商業模式是**「群體贊助 (Group Patronage)」**模型。我們不販售「個人能力」，我們販售的是「群組共享的樂趣」，這完美符合「摯友 App」的核心精神。
+【我們不做的】：
+* 不販售「電力」 (移除 Pay-to-Win)。
+* 不搞「訂閱制」 (移除月費壓力)。
+1. 主要營利點：販售「Vibe 幣」
+* 機制： 玩家使用「真實貨幣」（台幣），在商店中購買「Vibe 幣」包。
+* 關鍵： 購買的 Vibe 幣會直接存入「群組錢包」，作為對團隊的「贊助」。
+* 製作方法 (Tech)：
+   * (Godot) 整合 RevenueCat（或 Godot IAP 插件）來處理 App Store / Google Play 的金流。
+   * (Supabase) 交易成功後，呼叫一個 Supabase 函數，安全地為該群組的 vibe_coins 欄位增加數值。
+2. 貨幣出口 (Currency Sinks) - Vibe 幣的用途
+1. 功能 (Power)： 購買「AI 效果器」（全體共享）。
+2. 進程 (Progression)： 購買「基礎 Beat 包」（全體共享）。
+3. 外觀 (Cosmetic)： 購買「唱片行裝飾品」（全體共享）。
+4. 免費權益 (Free-to-Play Path)
+* 免費玩家可以體驗 100% 的核心玩法（錄音、編排、使用基礎 AI 效果器）。
+* 他們可以透過「群體升級」緩慢地積攢「Vibe 幣」，最終也能「免費」解鎖所有內容。
+* 他們 100% 可以使用「付費朋友」贊助群組所購買的任何 AI 效果器或 Beat。
+* MP3/WAV 下載功能保持免費，以鼓勵分享。
