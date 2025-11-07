@@ -8,51 +8,73 @@ extends Node
 
 # 當「音樂師」拖放音軌時，會呼叫這個函式
 # GDD 14.0 規格
-func save_sample_to_db(audio_data: PackedByteArray, track_type: String, start_time: float, chapter: int) -> void:
-	print("【VibeTrackAPI】: 收到「音樂師」的儲存請求...")
-	
-	# 1. 檢查使用者登入狀態並取得 user_id
-	var user = SupabaseClient.supabase.auth.get_current_user()
-	if not user:
-		print("【VibeTrackAPI】錯誤：使用者未登入，無法儲存音檔。")
+func save_sample_to_db(audio_data: PackedByteArray, track_type: String, start_time: float, chapter: int, group_id: String) -> void:
+	print("【VibeTrackAPI】: 收到「音樂師」的儲存請求，類型: %s, 時間: %s" % [track_type, start_time])
+
+	# --- 步驟 1: 獲取 User ID 並檢查參數 ---
+	var user = SupabaseClient.supabase.auth.get_user()
+	if user == null:
+		print("【VibeTrackAPI 錯誤】: 使用者未登入，無法儲存音檔。")
 		return
 	var user_id = user.id
 	
-	# 2. 取得 group_id (假設它儲存在 user_metadata)
-	# TODO: 這裡的 group_id 取得方式需要根據你的實際資料庫結構調整
-	var group_id = user.user_metadata.get("group_id", null)
-	if not group_id:
-		print("【VibeTrackAPI】錯誤：在 user_metadata 中找不到 group_id。")
+	if group_id.is_empty():
+		print("【VibeTrackAPI 錯誤】: group_id 為空，無法儲存。")
 		return
-		
-	# 3. (GDD 14.0 規格) 呼叫 Supabase Function 進行 AI 處理並儲存
-	# 我們將原始音檔和所有參數傳給後端，讓後端完成 AI 處理、上傳 Storage、寫入 DB 的所有工作。
-	# [cite: 77-79, 100-101]
-	print("【VibeTrackAPI】: 正在呼叫 Supabase Function 'process-and-save-sample'...")
-	var function_task = SupabaseClient.supabase.functions.invoke(
-		"process-and-save-sample",
-		{
-			"audio_data_b64": Marshalls.raw_to_base64(audio_data), # 將 PackedByteArray 轉為 Base64 字串
-			"track_type": track_type,
-			"start_time": start_time,
-			"group_id": group_id,
-			"user_id": user_id,
-			"chapter": chapter
-		}
-	)
-	await function_task.completed
+
+	# --- 步驟 2: (GDD 14.0 Storage) 上傳音檔到 Supabase Storage ---
+	# 建立一個唯一的檔案路徑，避免檔案名稱衝突
+	var file_path = "%s/%s.wav" % [group_id, str(Time.get_unix_time_from_system())]
+	print("【VibeTrackAPI】: 正在上傳音檔到 Storage: ", file_path)
 	
-	if function_task.error:
-		print("【VibeTrackAPI】錯誤：呼叫 Function 失敗: ", function_task.error)
+	# 執行上傳任務
+	var storage_task = SupabaseClient.supabase.storage().from("samples").upload(file_path, audio_data, {"content-type": "audio/wav"})
+	await storage_task.completed
+
+	if storage_task.error:
+		print("【VibeTrackAPI 錯誤】: 上傳 Storage 失敗: ", storage_task.error)
+		return
+
+	# --- 步驟 3: (GDD 14.0 Database) 將音檔資訊寫入 'song_tracks' 資料表 ---
+	var audio_url = SupabaseClient.supabase.storage().from("samples").get_public_url(file_path)
+	print("【VibeTrackAPI】: 音檔 URL: %s, 正在寫入資料庫..." % audio_url)
+	
+	var insert_data = {
+		"group_id": group_id,
+		"user_id": user_id,
+		"track_type": track_type,
+		"start_time": start_time,
+		"audio_url": audio_url,
+		"chapter": chapter
+	}
+	var insert_task = SupabaseClient.supabase.database().query("song_tracks", "insert", insert_data)
+	await insert_task.completed
+
+	if insert_task.error:
+		print("【VibeTrackAPI 錯誤】: 寫入 song_tracks 資料表失敗: ", insert_task.error)
 	else:
-		print("【VibeTrackAPI】: Function 執行成功！音檔已處理並儲存至資料庫。")
+		print("【VibeTrackAPI】: 成功！音檔已儲存並記錄到資料庫。")
 
 # 當「音樂師」的播放器需要歌曲資料時，會呼叫這個函式
 # [cite_start]GDD 14.0 規格 [cite: 87-88]
 func get_all_samples_from_db(group_id: String) -> Array:
 	print("【VibeTrackAPI】: 收到「音樂師」的讀取歌曲請求... (尚未實作)")
 	# TODO: 製作人 (B) 未來會在這裡填上 Supabase SELECT * FROM song_tracks
-	return [] # (重要！) 先傳回空陣列，避免「音樂師」的遊戲崩潰
+	
+	# 建立一個非同步任務來執行資料庫查詢
+	var query_task = SupabaseClient.supabase.database().query(
+		"song_tracks", 
+		"select", 
+		{ "select": "*", "group_id": "eq.%s" % group_id }
+	)
+	await query_task.completed
+	
+	if query_task.error:
+		print("【VibeTrackAPI】錯誤：讀取 song_tracks 資料表失敗: ", query_task.error)
+		return [] # 發生錯誤時，回傳空陣列以保護遊戲
+	
+	print("【VibeTrackAPI】: 成功讀取到 %d 筆音軌資料。" % query_task.result.size())
+	return query_task.result # 將查詢結果 (一個 Array[Dictionary]) 直接回傳給「音樂師」
 
 # 當「音樂師」要檢查章節鎖定時，會呼叫這個函式
 # [cite_start]GDD 14.0 規格 [cite: 116-117]

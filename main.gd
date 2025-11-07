@@ -281,7 +281,7 @@ func _can_drop_data(_at_position: Vector2, data) -> bool:
 	# 檢查拖曳過來的資料是否是我們能接受的 "audio_sample" 類型
 	return data is Dictionary and data.get("type") == "audio_sample"
 
-func _drop_data(at_position: Vector2, data: Dictionary) -> void:
+func _drop_data(at_position: Vector2, data: Variant) -> void:
 	# Godot 會自動偵測滑鼠在哪個 Control 上方，我們用 get_focus_owner() 來取得它
 	var track_node = get_focus_owner()
 	if not (track_node in [vocal_track, rhythm_track, sfx_track]):
