@@ -1,21 +1,33 @@
 extends Control
 
-const TOTAL_BLOCKS: int = 16
-const RECORDING_DURATION: float = 3.0  # 3 秒錄音
+# GDD 14.0 核心設定
+const BPM: float = 120.0
+const BEATS_PER_CHAPTER: int = 16 # 每個樂章有 16 拍 (4 小節)
+const SECONDS_PER_BEAT: float = 60.0 / BPM
+const PLAYER_POOL_SIZE: int = 10 # 音訊播放器池的大小
+const RECORDING_DURATION: float = 3.0 # 3 秒錄音
 
 # @onready 變數
-@onready var track_grid: GridContainer = $VBoxContainer/TrackGrid
 @onready var status_label: Label = $VBoxContainer/StatusLabel
 @onready var record_button: Button = $"VBoxContainer/ControlsHBox/Record Button"
 @onready var play_button: Button = $"VBoxContainer/ControlsHBox/Play Button"
 @onready var sound_player: AudioStreamPlayer = $SoundPlayer
 @onready var playback_timer: Timer = $PlaybackTimer
 
-var track_blocks: Array[Button] = []
-var sequence: Array[AudioStream] = []
+# GDD 14.0 新 UI 節點
+@onready var staging_slot: Panel = $VBoxContainer/ControlsHBox/StagingSlot
+@onready var vocal_track: GridContainer = $VBoxContainer/VocalTrack
+@onready var rhythm_track: GridContainer = $VBoxContainer/RhythmTrack
+@onready var sfx_track: Control = $VBoxContainer/SfxTrack
+
+# GDD 14.0 核心資料
+var song_data: Array = [] # 從 VibeTrackAPI 獲取的歌曲資料
 var recorded_sample: AudioStreamWAV = null
 var is_playing: bool = false
-var current_step: int = 0
+var playback_head_time: float = 0.0 # 播放頭，單位：秒
+
+# 播放器池
+var player_pool: Array[AudioStreamPlayer] = []
 
 # 錄音相關變數
 var is_recording: bool = false
@@ -27,10 +39,6 @@ var record_player: AudioStreamPlayer = null  # 用於錄音的播放器
 func _ready():
 	print("[Main] 場景開始初始化...")
 	
-	# 確保所有 @onready 變數都已初始化
-	if not track_grid:
-		push_error("[Main] track_grid 未找到！")
-		return
 	if not status_label:
 		push_error("[Main] status_label 未找到！")
 		return
@@ -43,25 +51,12 @@ func _ready():
 	
 	print("[Main] 所有 UI 節點已找到")
 	
-	# 初始化 sequence 陣列
-	for i in TOTAL_BLOCKS:
-		sequence.append(null)
-	
-	# 建立按鈕並連接訊號
-	for i in TOTAL_BLOCKS:
-		var button = Button.new()
-		button.text = str(i + 1)
-		button.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		button.size_flags_vertical = Control.SIZE_EXPAND_FILL
-		button.custom_minimum_size = Vector2(80, 80)
-		
-		# 連接 pressed 訊號
-		button.pressed.connect(on_track_block_pressed.bind(i))
-		
-		track_grid.add_child(button)
-		track_blocks.append(button)
-	
-	print("[Main] 已建立 %d 個區塊按鈕" % TOTAL_BLOCKS)
+	# 初始化播放器池
+	for i in PLAYER_POOL_SIZE:
+		var p = AudioStreamPlayer.new()
+		add_child(p)
+		player_pool.append(p)
+	print("[Main] 已建立 %d 個 AudioStreamPlayer 池" % PLAYER_POOL_SIZE)
 	
 	# 連接按鈕訊號
 	record_button.pressed.connect(on_record_button_pressed)
@@ -80,6 +75,12 @@ func _ready():
 	# 延遲檢查 Audio Input（等待一幀確保所有東西都已載入）
 	await get_tree().process_frame
 	check_audio_input()
+	
+	# 連接拖放訊號
+	staging_slot.gui_input.connect(_on_staging_slot_gui_input)
+	vocal_track.gui_input.connect(_on_track_gui_input.bind(vocal_track))
+	rhythm_track.gui_input.connect(_on_track_gui_input.bind(rhythm_track))
+	sfx_track.gui_input.connect(_on_track_gui_input.bind(sfx_track))
 	
 	print("[Main] 場景初始化完成")
 
@@ -229,6 +230,10 @@ func stop_recording():
 		# 自動播放預覽
 		preview_recording()
 	else:
+		# 清除暫存槽 UI
+		for child in staging_slot.get_children():
+			child.queue_free()
+			
 		is_recording = false
 		record_button.text = "Record"
 		status_label.text = "錄音失敗：無法獲取錄音資料"
@@ -245,33 +250,144 @@ func preview_recording():
 		sound_player.play()
 		status_label.text = "正在預覽錄音..."
 		print("[錄音] 開始預覽")
+		
+		# 更新 StagingSlot UI
+		# 清除舊的 UI
+		for child in staging_slot.get_children():
+			child.queue_free()
+		# 建立新的 Label
+		var label = Label.new()
+		label.text = "錄音好了！\n拖我！"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.autowrap_mode = TextServer.AUTOWRAP_WORD
+		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		staging_slot.add_child(label)
 
-func on_track_block_pressed(index: int):
-	if recorded_sample != null:
-		sequence[index] = recorded_sample
-		track_blocks[index].text = "POP!"
-		status_label.text = "樣本已放置到區塊 %d" % (index + 1)
-	else:
-		sequence[index] = null
-		track_blocks[index].text = str(index + 1)
-		status_label.text = "區塊 %d 已清除" % (index + 1)
+# --- 拖放功能 (Drag and Drop) ---
+
+func _on_staging_slot_gui_input(event: InputEvent):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
+		if recorded_sample:
+			print("[拖放] 開始從暫存槽拖曳...")
+			var drag_data = {
+				"type": "audio_sample",
+				"sample": recorded_sample
+			}
+			var preview = Label.new()
+			preview.text = "♪"
+			set_drag_preview(preview)
+			drag(drag_data, preview)
+
+func _on_track_gui_input(event: InputEvent, track_node: Control):
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		var drop_data = get_drop_data(event.position)
+		if drop_data and drop_data.get("type") == "audio_sample":
+			_on_drop_data(track_node, drop_data, event.position)
+
+func _on_drop_data(track_node: Control, data: Dictionary, position: Vector2):
+	print("[拖放] 在 %s 上偵測到放置事件" % track_node.name)
+	
+	var track_type: String
+	var start_time: float
+	var chapter: int = 1 # TODO: 之後從 get_song_progression 取得
+	
+	# 根據音軌類型決定 start_time 計算方式
+	match track_node.name:
+		"VocalTrack", "RhythmTrack":
+			track_type = "vocal" if track_node.name == "VocalTrack" else "rhythm"
+			# GridContainer: 對齊到網格
+			var grid_size = track_node.size / track_node.columns
+			var column = int(position.x / grid_size.x)
+			start_time = column * SECONDS_PER_BEAT
+			
+		"SfxTrack":
+			track_type = "sfx"
+			# Control: 自由時間軸
+			var total_width = track_node.size.x
+			var total_duration = BEATS_PER_CHAPTER * SECONDS_PER_BEAT # TODO: 之後要乘以總章節數
+			start_time = (position.x / total_width) * total_duration
+			
+		_:
+			print("[拖放] 錯誤：未知的音軌類型")
+			return
+			
+	print("[拖放] 計算結果 -> track_type: %s, start_time: %.2f" % [track_type, start_time])
+	
+	# GDD 14.0 黃金定律：呼叫 API 進行儲存
+	if data.sample and data.sample.data:
+		VibeTrackAPI.save_sample_to_db(data.sample.data, track_type, start_time, chapter)
+		
+		# 樂觀更新 UI (Optimistic UI Update)
+		# 假設儲存會成功，立即在本地渲染一個假的音檔塊
+		var temp_block_data = {
+			"track_type": track_type,
+			"start_time": start_time,
+			"audio_url": "local_preview" # 標記為本地預覽
+		}
+		render_block(temp_block_data)
+		
+		# 清空暫存槽
+		recorded_sample = null
+		for child in staging_slot.get_children():
+			child.queue_free()
+		var label = Label.new()
+		label.text = "暫存槽"
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		staging_slot.add_child(label)
+
+# --- 渲染功能 ---
+
+func render_block(block_data: Dictionary):
+	# TODO: 根據 block_data 渲染一個代表音檔的 UI 元素 (例如 Panel 或 Button)
+	# 並將其 add_child 到對應的 track_node 上
+	pass
+
+func render_all_tracks():
+	# TODO: 清除所有音軌上的舊 UI 元素
+	# for block_data in song_data:
+	#     render_block(block_data)
+	pass
+
+# --- 播放功能 ---
 
 func on_play_button_pressed():
 	is_playing = !is_playing
 	
 	if is_playing:
-		current_step = 0
+		playback_head_time = 0.0
 		play_button.text = "Stop"
 		playback_timer.start()
 		status_label.text = "播放中..."
 	else:
 		play_button.text = "Play"
 		playback_timer.stop()
+		# 停止所有在播放的聲音
+		for p in player_pool:
+			p.stop()
 		status_label.text = "已停止播放"
 
 func on_playback_timer_timeout():
-	if sequence[current_step] != null:
-		sound_player.stream = sequence[current_step]
-		sound_player.play()
+	if not is_playing:
+		return
+		
+	var time_since_last_frame = playback_timer.wait_time
+	var next_playback_head_time = playback_head_time + time_since_last_frame
 	
-	current_step = (current_step + 1) % TOTAL_BLOCKS
+	# 遍歷歌曲資料，尋找需要在此幀觸發的音檔
+	for sample in song_data:
+		var start_time = sample.get("start_time", -1.0)
+		if start_time >= playback_head_time and start_time < next_playback_head_time:
+			# 找到一個需要播放的音檔
+			print("[播放器] 觸發音檔，開始時間: ", start_time)
+			# TODO: 這裡需要從 VibeTrackAPI 獲取已載入的 AudioStream
+			# var stream = VibeTrackAPI.get_loaded_stream(sample.audio_url)
+			# if stream:
+			#    play_from_pool(stream)
+			
+	# 更新播放頭時間
+	playback_head_time = next_playback_head_time
+	
+	# TODO: 之後加入循環播放邏輯

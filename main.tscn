@@ -30,9 +30,14 @@ text = "Record"
 layout_mode = 2
 text = "Play"
 
-[node name="TrackGrid" type="GridContainer" parent="VBoxContainer"]
+[node name="Vocal_Track" type="GridContainer" parent="VBoxContainer/ControlsHBox"]
 layout_mode = 2
-columns = 4
+
+[node name="Rhythm_Track" type="GridContainer" parent="VBoxContainer/ControlsHBox"]
+layout_mode = 2
+
+[node name="SFX_Track" type="Control" parent="VBoxContainer/ControlsHBox"]
+layout_mode = 2
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer"]
 layout_mode = 2
