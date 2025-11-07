@@ -77,10 +77,7 @@ func _ready():
 	check_audio_input()
 	
 	# 連接拖放訊號
-	staging_slot.gui_input.connect(_on_staging_slot_gui_input)
-	vocal_track.gui_input.connect(_on_track_gui_input.bind(vocal_track))
-	rhythm_track.gui_input.connect(_on_track_gui_input.bind(rhythm_track))
-	sfx_track.gui_input.connect(_on_track_gui_input.bind(sfx_track))
+	staging_slot.gui_input.connect(_on_staging_slot_gui_input) # 拖曳的起點仍然需要 gui_input
 	
 	print("[Main] 場景初始化完成")
 
@@ -277,13 +274,22 @@ func _on_staging_slot_gui_input(event: InputEvent):
 			var preview = Label.new()
 			preview.text = "♪"
 			set_drag_preview(preview)
-			get_viewport().gui_drag_and_drop(drag_data, preview, self)
+			# 在 Godot 4 中，我們使用 drag_and_drop 來啟動
+			drag_and_drop(drag_data, preview)
 
-func _on_track_gui_input(event: InputEvent, track_node: Control):
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
-		var drop_data = get_drop_data(event.position)
-		if drop_data and drop_data.get("type") == "audio_sample":
-			_on_drop_data(track_node, drop_data, event.position)
+func _can_drop_data(_at_position: Vector2, data) -> bool:
+	# 檢查拖曳過來的資料是否是我們能接受的 "audio_sample" 類型
+	return data is Dictionary and data.get("type") == "audio_sample"
+
+func _drop_data(at_position: Vector2, data: Dictionary) -> void:
+	# Godot 會自動偵測滑鼠在哪個 Control 上方，我們用 get_focus_owner() 來取得它
+	var track_node = get_focus_owner()
+	if not (track_node in [vocal_track, rhythm_track, sfx_track]):
+		print("[拖放] 放置在無效的區域")
+		return
+		
+	# 呼叫我們原本的放置邏輯，但現在是從 Godot 的 _drop_data 函式中觸發
+	_on_drop_data(track_node, data, at_position)
 
 func _on_drop_data(track_node: Control, data: Dictionary, position: Vector2):
 	print("[拖放] 在 %s 上偵測到放置事件" % track_node.name)
