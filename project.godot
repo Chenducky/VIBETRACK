@@ -23,6 +23,7 @@ driver/enable_input=true
 
 SupabaseClient="*res://SupabaseClient.gd"
 Supabase="*res://addons/supabase/Supabase/supabase.gd"
+VibeTrackAPI="*res://VibeTrackAPI.gd"
 
 [editor]
 
