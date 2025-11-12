@@ -3,7 +3,7 @@ extends Control
 # GDD 14.0 核心設定
 const BPM: float = 120.0
 const BEATS_PER_CHAPTER: int = 16 # 每個樂章有 16 拍 (4 小節)
-const SECONDS_PER_BEAT: float = 60.0 / BPM
+const SECONDS_PER_BEAT: float = 60.0 / BPM # 0.5 秒/拍
 const PLAYER_POOL_SIZE: int = 10 # 音訊播放器池的大小
 const RECORDING_DURATION: float = 3.0 # 3 秒錄音
 
@@ -15,10 +15,10 @@ const RECORDING_DURATION: float = 3.0 # 3 秒錄音
 @onready var playback_timer: Timer = $PlaybackTimer
 
 # GDD 14.0 新 UI 節點
-@onready var staging_slot: Panel = $VBoxContainer/ControlsHBox/StagingSlot
-@onready var vocal_track: GridContainer = $VBoxContainer/VocalTrack
-@onready var rhythm_track: GridContainer = $VBoxContainer/RhythmTrack
-@onready var sfx_track: Control = $VBoxContainer/SfxTrack
+@onready var staging_slot: Panel = $"VBoxContainer/ControlsHBox/StagingSlot"
+@onready var vocal_track: GridContainer = $"VBoxContainer/ControlsHBox/Vocal_Track"
+@onready var rhythm_track: GridContainer = $"VBoxContainer/ControlsHBox/Rhythm_Track"
+@onready var sfx_track: Control = $"VBoxContainer/ControlsHBox/SFX_Track"
 
 # GDD 14.0 核心資料
 var song_data: Array = [] # 從 VibeTrackAPI 獲取的歌曲資料
@@ -75,25 +75,24 @@ func _ready():
 	# 延遲檢查 Audio Input（等待一幀確保所有東西都已載入）
 	await get_tree().process_frame
 	check_audio_input()
-	
-	# 連接拖放訊號
-	staging_slot.gui_input.connect(_on_staging_slot_gui_input) # 拖曳的起點仍然需要 gui_input
-	
+		
 	print("[Main] 場景初始化完成")
 
 func check_audio_input():
-	var audio_server = AudioServer
-	var input_device_count = audio_server.get_input_device_count()
+	# 在 Godot 4 中，我們直接使用 AudioServer 單例
+	var input_devices = AudioServer.get_input_device_list()
 	
-	if input_device_count == 0:
+	if input_devices.size() == 0:
 		status_label.text = "警告：未偵測到輸入裝置"
 		print("[錄音] 未偵測到輸入裝置")
 	else:
-		var default_input = audio_server.input_device
+		# AudioServer.input_device 仍然是獲取當前預設裝置的正確方式
+		var default_input = AudioServer.input_device
 		status_label.text = "就緒 (輸入裝置: %s)" % default_input
-		print("[錄音] 輸入裝置數量: ", input_device_count)
+		print("[錄音] 輸入裝置數量: ", input_devices.size())
 		print("[錄音] 當前輸入裝置: ", default_input)
-		print("[錄音] Audio Input 啟用狀態: ", audio_server.is_input_device_enabled())
+		# 在 Godot 4 中，is_input_device_enabled() 已被移除。
+		# 只要 get_input_device_list() 的數量大於 0，就代表音訊輸入是可用的。
 
 func setup_audio_bus() -> bool:
 	var audio_server = AudioServer
@@ -236,7 +235,7 @@ func stop_recording():
 		status_label.text = "錄音失敗：無法獲取錄音資料"
 		print("[錄音錯誤] 無法獲取錄音資料")
 
-func _on_recording_timer_timeout():
+func _on_recording_timer_timeout() -> void:
 	print("[錄音] 計時器到期，自動停止")
 	if is_recording:
 		stop_recording()
@@ -248,71 +247,94 @@ func preview_recording():
 		status_label.text = "正在預覽錄音..."
 		print("[錄音] 開始預覽")
 		
-		# 更新 StagingSlot UI
+		# GDD 14.0 流程：更新 StagingSlot UI，使其可被拖曳
 		# 清除舊的 UI
 		for child in staging_slot.get_children():
 			child.queue_free()
-		# 建立新的 Label
+			
+		# 建立一個新的 Label 來代表這個可拖曳的樣本
 		var label = Label.new()
 		label.text = "錄音好了！\n拖我！"
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD
 		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		
+		# (重要) 將錄音資料直接附加到 StagingSlot 節點的元資料中
+		# 這樣 _get_drag_data 就可以從節點本身讀取到它
+		staging_slot.set_meta("audio_sample", recorded_sample)
+		
 		staging_slot.add_child(label)
 
 # --- 拖放功能 (Drag and Drop) ---
 
-func _on_staging_slot_gui_input(event: InputEvent):
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		if recorded_sample:
-			print("[拖放] 開始從暫存槽拖曳...")
+# GDD 14.0 規格：實作 Godot 4 原生拖放
+
+func _get_drag_data(at_position: Vector2) -> Variant:
+	# 這個函式會在任何附加此腳本的 Control 節點上開始拖曳時被 Godot 自動呼叫。
+	# 我們需要判斷拖曳的是否是 StagingSlot。
+	var dragged_node = get_node_at_mouse_position()
+	
+	# 檢查滑鼠下的節點是否是 StagingSlot 或其子節點
+	if dragged_node == staging_slot or (dragged_node != null and dragged_node.get_parent() == staging_slot):
+		# 從 StagingSlot 的元資料中讀取之前存入的音檔
+		var sample_to_drag = staging_slot.get_meta("audio_sample", null)
+		
+		if sample_to_drag:
+			print("[拖放] 開始從 StagingSlot 拖曳...")
+			
+			# GDD 14.0 規格：準備要傳遞的 Dictionary
 			var drag_data = {
 				"type": "audio_sample",
-				"sample": recorded_sample
+				"sample": sample_to_drag
 			}
+			
+			# 建立拖曳時的預覽圖示
 			var preview = Label.new()
 			preview.text = "♪"
 			set_drag_preview(preview)
-			# 在 Godot 4 中，我們使用 drag_and_drop 來啟動
-			drag_and_drop(drag_data, preview)
+			
+			return drag_data
+			
+	return null # 如果拖曳的不是 StagingSlot，或它沒有音檔，則不進行任何操作
 
-func _can_drop_data(_at_position: Vector2, data) -> bool:
-	# 檢查拖曳過來的資料是否是我們能接受的 "audio_sample" 類型
+func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
+	# 這個函式會在「任何」有 drop_mode 的 Control 上方時被呼叫
+	# 我們只需要檢查資料格式是否正確
 	return data is Dictionary and data.get("type") == "audio_sample"
 
 func _drop_data(at_position: Vector2, data: Variant) -> void:
-	# Godot 會自動偵測滑鼠在哪個 Control 上方，我們用 get_focus_owner() 來取得它
-	var track_node = get_focus_owner()
-	if not (track_node in [vocal_track, rhythm_track, sfx_track]):
-		print("[拖放] 放置在無效的區域")
+	# 這個函式會在「成功放置」時，於目標 Control (音軌) 上被呼叫
+	# 我們用 get_node_at_mouse_position() 來取得滑鼠下的音軌節點
+	var track_node = get_node_at_mouse_position()
+	
+	# 確保我們真的有抓到音軌節點
+	if not (track_node == vocal_track or track_node == rhythm_track or track_node == sfx_track):
+		# 如果因為某些原因 (例如 UI 重疊) 沒抓到，做個保護
+		print("[拖放] 放置在無效的區域，操作取消。")
 		return
-		
-	# 呼叫我們原本的放置邏輯，但現在是從 Godot 的 _drop_data 函式中觸發
-	_on_drop_data(track_node, data, at_position)
 
-func _on_drop_data(track_node: Control, data: Dictionary, position: Vector2):
 	print("[拖放] 在 %s 上偵測到放置事件" % track_node.name)
 	
 	var track_type: String
 	var start_time: float
-	var chapter: int = 1 # TODO: 之後從 get_song_progression 取得
+	var chapter: int = 1 # TODO: 之後從 VibeTrackAPI.get_song_progression 取得
 	
 	# 根據音軌類型決定 start_time 計算方式
 	match track_node.name:
 		"VocalTrack", "RhythmTrack":
 			track_type = "vocal" if track_node.name == "VocalTrack" else "rhythm"
 			# GridContainer: 對齊到網格
-			var grid_size = track_node.size / track_node.columns
-			var column = int(position.x / grid_size.x)
+			var grid_size = track_node.size / (track_node as GridContainer).columns
+			var column = int(at_position.x / grid_size.x)
 			start_time = column * SECONDS_PER_BEAT
 			
 		"SfxTrack":
 			track_type = "sfx"
 			# Control: 自由時間軸
 			var total_width = track_node.size.x
-			var total_duration = BEATS_PER_CHAPTER * SECONDS_PER_BEAT # TODO: 之後要乘以總章節數
-			start_time = (position.x / total_width) * total_duration
+			var total_duration = BEATS_PER_CHAPTER * SECONDS_PER_BEAT # TODO: 之後要乘以總章節數 (從 API 拿)
+			start_time = (at_position.x / total_width) * total_duration
 			
 		_:
 			print("[拖放] 錯誤：未知的音軌類型")
@@ -321,8 +343,10 @@ func _on_drop_data(track_node: Control, data: Dictionary, position: Vector2):
 	print("[拖放] 計算結果 -> track_type: %s, start_time: %.2f" % [track_type, start_time])
 	
 	# GDD 14.0 黃金定律：呼叫 API 進行儲存
-	if data.sample and data.sample.data:
-		VibeTrackAPI.save_sample_to_db(data.sample.data, track_type, start_time, chapter)
+	# TODO: group_id 應該從登入或其他地方取得，這裡暫時用假資料
+	var group_id = "your_group_id" 
+	if data.has("sample") and data.sample is AudioStreamWAV and data.sample.data:
+		VibeTrackAPI.save_sample_to_db(data.sample.data, track_type, start_time, chapter, group_id)
 		
 		# 樂觀更新 UI (Optimistic UI Update)
 		# 假設儲存會成功，立即在本地渲染一個假的音檔塊
@@ -337,12 +361,33 @@ func _on_drop_data(track_node: Control, data: Dictionary, position: Vector2):
 		recorded_sample = null
 		for child in staging_slot.get_children():
 			child.queue_free()
+		
+		# (重要) 清除元資料，避免被重複拖曳
+		staging_slot.remove_meta("audio_sample")
+		
 		var label = Label.new()
 		label.text = "暫存槽"
 		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
 		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		staging_slot.add_child(label)
+
+func get_node_at_mouse_position() -> Node:
+	# 輔助函式：取得滑鼠當前位置下的最上層 UI 節點
+	var space_state = get_world_2d().direct_space_state
+	
+	# 建立一個點查詢參數物件
+	var query = PhysicsPointQueryParameters2D.new()
+	# 設定要查詢的點（滑鼠的目前位置）
+	query.position = get_global_mouse_position()
+	# 我們只想偵測 GUI 圖層上的 Control 節點，它們通常是 Area2D
+	query.collide_with_areas = true
+	
+	# 執行查詢，它會回傳一個包含結果的陣列
+	var result = space_state.intersect_point(query)
+	if not result.is_empty():
+		return result[0].get("collider")
+	return null
 
 # --- 渲染功能 ---
 
