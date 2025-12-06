@@ -1,8 +1,55 @@
-[gd_scene load_steps=4 format=3 uid="uid://bmwyoccvylrim"]
+[gd_scene load_steps=11 format=3 uid="uid://bmwyoccvylrim"]
 
 [ext_resource type="Script" uid="uid://c6r1hhfqh27w5" path="res://main.gd" id="1_ig7tw"]
 [ext_resource type="Script" uid="uid://clrkchew5o45r" path="res://DroppableTrack.gd" id="2_0xm2m"]
 [ext_resource type="Script" uid="uid://dnx0q1u2b60a1" path="res://DraggableSample.gd" id="2_h2yge"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_h2yge"]
+bg_color = Color(0.31812674, 0.6215961, 0.90175116, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+shadow_size = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_1bvp3"]
+bg_color = Color(0.83137256, 0.5137255, 0.09019608, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+shadow_size = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lquwl"]
+bg_color = Color(0.5213862, 0.6601215, 0.17129269, 1)
+corner_radius_top_left = 20
+corner_radius_top_right = 20
+corner_radius_bottom_right = 20
+corner_radius_bottom_left = 20
+shadow_size = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_7mycd"]
+bg_color = Color(0.9916658, 0.24364132, 0.69554514, 1)
+corner_radius_top_left = 50
+corner_radius_top_right = 50
+corner_radius_bottom_right = 50
+corner_radius_bottom_left = 50
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_5vw27"]
+bg_color = Color(0.9839081, 0.3398972, 0.4479341, 1)
+corner_radius_top_left = 50
+corner_radius_top_right = 50
+corner_radius_bottom_right = 50
+corner_radius_bottom_left = 50
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_272bh"]
+bg_color = Color(0.37555453, 0.6679189, 0.5662652, 1)
+corner_radius_top_left = 50
+corner_radius_top_right = 50
+corner_radius_bottom_right = 50
+corner_radius_bottom_left = 50
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_kek77"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -21,23 +68,46 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="ControlsHBox" type="HBoxContainer" parent="VBoxContainer"]
+[node name="TracksArea" type="VBoxContainer" parent="VBoxContainer"]
 layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 30
+alignment = 1
 
-[node name="Record Button" type="Button" parent="VBoxContainer/ControlsHBox"]
+[node name="Rhythm_Track" type="Panel" parent="VBoxContainer/TracksArea"]
+custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
-text = "Record"
+theme_override_styles/panel = SubResource("StyleBoxFlat_h2yge")
+script = ExtResource("2_0xm2m")
 
-[node name="Play Button" type="Button" parent="VBoxContainer/ControlsHBox"]
+[node name="Vocal_Track" type="Panel" parent="VBoxContainer/TracksArea"]
+custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
-text = "Play"
+theme_override_styles/panel = SubResource("StyleBoxFlat_1bvp3")
+script = ExtResource("2_0xm2m")
 
-[node name="StagingSlot" type="Panel" parent="VBoxContainer/ControlsHBox"]
-custom_minimum_size = Vector2(100, 100)
+[node name="SFX_Track" type="Panel" parent="VBoxContainer/TracksArea"]
+custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_lquwl")
+script = ExtResource("2_0xm2m")
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+layout_mode = 2
+text = "Status: Ready"
+
+[node name="BottomArea" type="VBoxContainer" parent="VBoxContainer"]
+custom_minimum_size = Vector2(0, 300)
+layout_mode = 2
+theme_override_constants/separation = 4
+
+[node name="StagingSlot" type="Panel" parent="VBoxContainer/BottomArea"]
+custom_minimum_size = Vector2(120, 120)
+layout_mode = 2
+size_flags_horizontal = 4
 script = ExtResource("2_h2yge")
 
-[node name="Label" type="Label" parent="VBoxContainer/ControlsHBox/StagingSlot"]
+[node name="Label" type="Label" parent="VBoxContainer/BottomArea/StagingSlot"]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -48,23 +118,36 @@ text = "暫存槽"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="Vocal_Track" type="GridContainer" parent="VBoxContainer/ControlsHBox"]
+[node name="Record Button" type="Button" parent="VBoxContainer/BottomArea"]
+custom_minimum_size = Vector2(100, 100)
 layout_mode = 2
-script = ExtResource("2_0xm2m")
+size_flags_horizontal = 4
+theme_override_styles/normal = SubResource("StyleBoxFlat_7mycd")
+text = "Record"
 
-[node name="Rhythm_Track" type="GridContainer" parent="VBoxContainer/ControlsHBox"]
+[node name="PreviewUI" type="HBoxContainer" parent="VBoxContainer/BottomArea"]
+visible = false
 layout_mode = 2
-script = ExtResource("2_0xm2m")
-track_type = "rhythm"
+size_flags_horizontal = 4
+theme_override_constants/separation = 30
 
-[node name="SFX_Track" type="Control" parent="VBoxContainer/ControlsHBox"]
+[node name="CancelButton" type="Button" parent="VBoxContainer/BottomArea/PreviewUI"]
+custom_minimum_size = Vector2(75, 75)
 layout_mode = 2
-script = ExtResource("2_0xm2m")
-track_type = "sfx"
+theme_override_styles/normal = SubResource("StyleBoxFlat_5vw27")
+text = "❌"
 
-[node name="StatusLabel" type="Label" parent="VBoxContainer"]
+[node name="PreviewPlayButton" type="Button" parent="VBoxContainer/BottomArea/PreviewUI"]
+custom_minimum_size = Vector2(100, 100)
 layout_mode = 2
-text = "Status: Ready"
+theme_override_styles/normal = SubResource("StyleBoxFlat_272bh")
+text = "▶️"
+
+[node name="ConfirmButton" type="Button" parent="VBoxContainer/BottomArea/PreviewUI"]
+custom_minimum_size = Vector2(75, 75)
+layout_mode = 2
+theme_override_styles/normal = SubResource("StyleBoxFlat_kek77")
+text = "✅"
 
 [node name="SoundPlayer" type="AudioStreamPlayer" parent="."]
 
