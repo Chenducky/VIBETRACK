@@ -1,6 +1,8 @@
-[gd_scene load_steps=2 format=3 uid="uid://bmwyoccvylrim"]
+[gd_scene load_steps=4 format=3 uid="uid://bmwyoccvylrim"]
 
 [ext_resource type="Script" uid="uid://c6r1hhfqh27w5" path="res://main.gd" id="1_ig7tw"]
+[ext_resource type="Script" uid="uid://clrkchew5o45r" path="res://DroppableTrack.gd" id="2_0xm2m"]
+[ext_resource type="Script" uid="uid://dnx0q1u2b60a1" path="res://DraggableSample.gd" id="2_h2yge"]
 
 [node name="Main" type="Control"]
 layout_mode = 3
@@ -33,6 +35,7 @@ text = "Play"
 [node name="StagingSlot" type="Panel" parent="VBoxContainer/ControlsHBox"]
 custom_minimum_size = Vector2(100, 100)
 layout_mode = 2
+script = ExtResource("2_h2yge")
 
 [node name="Label" type="Label" parent="VBoxContainer/ControlsHBox/StagingSlot"]
 layout_mode = 1
@@ -47,12 +50,17 @@ vertical_alignment = 1
 
 [node name="Vocal_Track" type="GridContainer" parent="VBoxContainer/ControlsHBox"]
 layout_mode = 2
+script = ExtResource("2_0xm2m")
 
 [node name="Rhythm_Track" type="GridContainer" parent="VBoxContainer/ControlsHBox"]
 layout_mode = 2
+script = ExtResource("2_0xm2m")
+track_type = "rhythm"
 
 [node name="SFX_Track" type="Control" parent="VBoxContainer/ControlsHBox"]
 layout_mode = 2
+script = ExtResource("2_0xm2m")
+track_type = "sfx"
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer"]
 layout_mode = 2

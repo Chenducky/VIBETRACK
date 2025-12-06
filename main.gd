@@ -3,7 +3,7 @@ extends Control
 # GDD 14.0 核心設定
 const BPM: float = 120.0
 const BEATS_PER_CHAPTER: int = 16 # 每個樂章有 16 拍 (4 小節)
-const SECONDS_PER_BEAT: float = 60.0 / BPM # 0.5 秒/拍
+const SECONDS_PER_BEAT: float = 60.0 / BPM
 const PLAYER_POOL_SIZE: int = 10 # 音訊播放器池的大小
 const RECORDING_DURATION: float = 3.0 # 3 秒錄音
 
@@ -15,10 +15,10 @@ const RECORDING_DURATION: float = 3.0 # 3 秒錄音
 @onready var playback_timer: Timer = $PlaybackTimer
 
 # GDD 14.0 新 UI 節點
-@onready var staging_slot: Panel = $"VBoxContainer/ControlsHBox/StagingSlot"
-@onready var vocal_track: GridContainer = $"VBoxContainer/ControlsHBox/Vocal_Track"
-@onready var rhythm_track: GridContainer = $"VBoxContainer/ControlsHBox/Rhythm_Track"
-@onready var sfx_track: Control = $"VBoxContainer/ControlsHBox/SFX_Track"
+@onready var staging_slot: DraggableSample = $"VBoxContainer/ControlsHBox/StagingSlot"
+@onready var vocal_track: DroppableTrack = $"VBoxContainer/ControlsHBox/Vocal_Track"
+@onready var rhythm_track: DroppableTrack = $"VBoxContainer/ControlsHBox/Rhythm_Track"
+@onready var sfx_track: DroppableTrack = $"VBoxContainer/ControlsHBox/SFX_Track"
 
 # GDD 14.0 核心資料
 var song_data: Array = [] # 從 VibeTrackAPI 獲取的歌曲資料
@@ -75,6 +75,11 @@ func _ready():
 	# 延遲檢查 Audio Input（等待一幀確保所有東西都已載入）
 	await get_tree().process_frame
 	check_audio_input()
+
+	# 連接 DroppableTrack 的信號，以便在放置成功後更新 UI
+	vocal_track.sample_dropped_successfully.connect(on_sample_placed)
+	rhythm_track.sample_dropped_successfully.connect(on_sample_placed)
+	sfx_track.sample_dropped_successfully.connect(on_sample_placed)
 		
 	print("[Main] 場景初始化完成")
 
@@ -260,134 +265,29 @@ func preview_recording():
 		label.autowrap_mode = TextServer.AUTOWRAP_WORD
 		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 		
-		# (重要) 將錄音資料直接附加到 StagingSlot 節點的元資料中
-		# 這樣 _get_drag_data 就可以從節點本身讀取到它
-		staging_slot.set_meta("audio_sample", recorded_sample)
+		# 將錄音資料交給 DraggableSample 腳本處理
+		staging_slot.audio_sample = recorded_sample
 		
 		staging_slot.add_child(label)
 
-# --- 拖放功能 (Drag and Drop) ---
-
-# GDD 14.0 規格：實作 Godot 4 原生拖放
-
-func _get_drag_data(at_position: Vector2) -> Variant:
-	# 這個函式會在任何附加此腳本的 Control 節點上開始拖曳時被 Godot 自動呼叫。
-	# 我們需要判斷拖曳的是否是 StagingSlot。
-	var dragged_node = get_node_at_mouse_position()
+func on_sample_placed():
+	"""當 DroppableTrack 發出 sample_dropped_successfully 信號時，此函式會被呼叫。"""
+	print("[Main] 收到音檔放置成功信號，正在清空暫存槽...")
 	
-	# 檢查滑鼠下的節點是否是 StagingSlot 或其子節點
-	if dragged_node == staging_slot or (dragged_node != null and dragged_node.get_parent() == staging_slot):
-		# 從 StagingSlot 的元資料中讀取之前存入的音檔
-		var sample_to_drag = staging_slot.get_meta("audio_sample", null)
-		
-		if sample_to_drag:
-			print("[拖放] 開始從 StagingSlot 拖曳...")
-			
-			# GDD 14.0 規格：準備要傳遞的 Dictionary
-			var drag_data = {
-				"type": "audio_sample",
-				"sample": sample_to_drag
-			}
-			
-			# 建立拖曳時的預覽圖示
-			var preview = Label.new()
-			preview.text = "♪"
-			set_drag_preview(preview)
-			
-			return drag_data
-			
-	return null # 如果拖曳的不是 StagingSlot，或它沒有音檔，則不進行任何操作
-
-func _can_drop_data(at_position: Vector2, data: Variant) -> bool:
-	# 這個函式會在「任何」有 drop_mode 的 Control 上方時被呼叫
-	# 我們只需要檢查資料格式是否正確
-	return data is Dictionary and data.get("type") == "audio_sample"
-
-func _drop_data(at_position: Vector2, data: Variant) -> void:
-	# 這個函式會在「成功放置」時，於目標 Control (音軌) 上被呼叫
-	# 我們用 get_node_at_mouse_position() 來取得滑鼠下的音軌節點
-	var track_node = get_node_at_mouse_position()
+	# 清空本地的錄音資料
+	recorded_sample = null
+	staging_slot.audio_sample = null
 	
-	# 確保我們真的有抓到音軌節點
-	if not (track_node == vocal_track or track_node == rhythm_track or track_node == sfx_track):
-		# 如果因為某些原因 (例如 UI 重疊) 沒抓到，做個保護
-		print("[拖放] 放置在無效的區域，操作取消。")
-		return
-
-	print("[拖放] 在 %s 上偵測到放置事件" % track_node.name)
+	# 重設 StagingSlot 的 UI
+	for child in staging_slot.get_children():
+		child.queue_free()
 	
-	var track_type: String
-	var start_time: float
-	var chapter: int = 1 # TODO: 之後從 VibeTrackAPI.get_song_progression 取得
-	
-	# 根據音軌類型決定 start_time 計算方式
-	match track_node.name:
-		"VocalTrack", "RhythmTrack":
-			track_type = "vocal" if track_node.name == "VocalTrack" else "rhythm"
-			# GridContainer: 對齊到網格
-			var grid_size = track_node.size / (track_node as GridContainer).columns
-			var column = int(at_position.x / grid_size.x)
-			start_time = column * SECONDS_PER_BEAT
-			
-		"SfxTrack":
-			track_type = "sfx"
-			# Control: 自由時間軸
-			var total_width = track_node.size.x
-			var total_duration = BEATS_PER_CHAPTER * SECONDS_PER_BEAT # TODO: 之後要乘以總章節數 (從 API 拿)
-			start_time = (at_position.x / total_width) * total_duration
-			
-		_:
-			print("[拖放] 錯誤：未知的音軌類型")
-			return
-			
-	print("[拖放] 計算結果 -> track_type: %s, start_time: %.2f" % [track_type, start_time])
-	
-	# GDD 14.0 黃金定律：呼叫 API 進行儲存
-	# TODO: group_id 應該從登入或其他地方取得，這裡暫時用假資料
-	var group_id = "your_group_id" 
-	if data.has("sample") and data.sample is AudioStreamWAV and data.sample.data:
-		VibeTrackAPI.save_sample_to_db(data.sample.data, track_type, start_time, chapter, group_id)
-		
-		# 樂觀更新 UI (Optimistic UI Update)
-		# 假設儲存會成功，立即在本地渲染一個假的音檔塊
-		var temp_block_data = {
-			"track_type": track_type,
-			"start_time": start_time,
-			"audio_url": "local_preview" # 標記為本地預覽
-		}
-		render_block(temp_block_data)
-		
-		# 清空暫存槽
-		recorded_sample = null
-		for child in staging_slot.get_children():
-			child.queue_free()
-		
-		# (重要) 清除元資料，避免被重複拖曳
-		staging_slot.remove_meta("audio_sample")
-		
-		var label = Label.new()
-		label.text = "暫存槽"
-		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-		staging_slot.add_child(label)
-
-func get_node_at_mouse_position() -> Node:
-	# 輔助函式：取得滑鼠當前位置下的最上層 UI 節點
-	var space_state = get_world_2d().direct_space_state
-	
-	# 建立一個點查詢參數物件
-	var query = PhysicsPointQueryParameters2D.new()
-	# 設定要查詢的點（滑鼠的目前位置）
-	query.position = get_global_mouse_position()
-	# 我們只想偵測 GUI 圖層上的 Control 節點，它們通常是 Area2D
-	query.collide_with_areas = true
-	
-	# 執行查詢，它會回傳一個包含結果的陣列
-	var result = space_state.intersect_point(query)
-	if not result.is_empty():
-		return result[0].get("collider")
-	return null
+	var label = Label.new()
+	label.text = "暫存槽"
+	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	label.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	staging_slot.add_child(label)
 
 # --- 渲染功能 ---
 
