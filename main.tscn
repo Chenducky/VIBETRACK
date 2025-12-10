@@ -68,25 +68,32 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="TracksArea" type="VBoxContainer" parent="VBoxContainer"]
+[node name="TimelineScroll" type="ScrollContainer" parent="VBoxContainer"]
 layout_mode = 2
+size_flags_vertical = 3
+vertical_scroll_mode = 0
+
+[node name="TracksArea" type="VBoxContainer" parent="VBoxContainer/TimelineScroll"]
+custom_minimum_size = Vector2(1080, 0)
+layout_mode = 2
+size_flags_horizontal = 3
 size_flags_vertical = 3
 theme_override_constants/separation = 30
 alignment = 1
 
-[node name="Rhythm_Track" type="Panel" parent="VBoxContainer/TracksArea"]
+[node name="Rhythm_Track" type="Panel" parent="VBoxContainer/TimelineScroll/TracksArea"]
 custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_h2yge")
 script = ExtResource("2_0xm2m")
 
-[node name="Vocal_Track" type="Panel" parent="VBoxContainer/TracksArea"]
+[node name="Vocal_Track" type="Panel" parent="VBoxContainer/TimelineScroll/TracksArea"]
 custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_1bvp3")
 script = ExtResource("2_0xm2m")
 
-[node name="SFX_Track" type="Panel" parent="VBoxContainer/TracksArea"]
+[node name="SFX_Track" type="Panel" parent="VBoxContainer/TimelineScroll/TracksArea"]
 custom_minimum_size = Vector2(0, 200)
 layout_mode = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_lquwl")
