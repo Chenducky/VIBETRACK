@@ -68,36 +68,52 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 
-[node name="TimelineScroll" type="ScrollContainer" parent="VBoxContainer"]
+[node name="TracksMargin" type="MarginContainer" parent="VBoxContainer"]
 layout_mode = 2
 size_flags_vertical = 3
+theme_override_constants/margin_left = 200
+theme_override_constants/margin_right = 60
+
+[node name="TimelineScroll" type="ScrollContainer" parent="VBoxContainer/TracksMargin"]
+layout_mode = 2
 vertical_scroll_mode = 0
 
-[node name="TracksArea" type="VBoxContainer" parent="VBoxContainer/TimelineScroll"]
+[node name="TracksArea" type="VBoxContainer" parent="VBoxContainer/TracksMargin/TimelineScroll"]
 custom_minimum_size = Vector2(1080, 0)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 3
-theme_override_constants/separation = 30
+theme_override_constants/separation = 100
 alignment = 1
 
-[node name="Rhythm_Track" type="Panel" parent="VBoxContainer/TimelineScroll/TracksArea"]
-custom_minimum_size = Vector2(0, 200)
+[node name="Rhythm_Track" type="Panel" parent="VBoxContainer/TracksMargin/TimelineScroll/TracksArea"]
+custom_minimum_size = Vector2(9480.889, 177.76666)
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
 theme_override_styles/panel = SubResource("StyleBoxFlat_h2yge")
 script = ExtResource("2_0xm2m")
+track_type = "rhythm"
+visible_grids = 60
 
-[node name="Vocal_Track" type="Panel" parent="VBoxContainer/TimelineScroll/TracksArea"]
-custom_minimum_size = Vector2(0, 200)
+[node name="Vocal_Track" type="Panel" parent="VBoxContainer/TracksMargin/TimelineScroll/TracksArea"]
+custom_minimum_size = Vector2(9480.889, 177.76666)
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
 theme_override_styles/panel = SubResource("StyleBoxFlat_1bvp3")
 script = ExtResource("2_0xm2m")
+visible_grids = 60
 
-[node name="SFX_Track" type="Panel" parent="VBoxContainer/TimelineScroll/TracksArea"]
-custom_minimum_size = Vector2(0, 200)
+[node name="SFX_Track" type="Panel" parent="VBoxContainer/TracksMargin/TimelineScroll/TracksArea"]
+custom_minimum_size = Vector2(8426.667, 158)
 layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
 theme_override_styles/panel = SubResource("StyleBoxFlat_lquwl")
 script = ExtResource("2_0xm2m")
+track_type = "sfx"
+visible_grids = 60
 
 [node name="StatusLabel" type="Label" parent="VBoxContainer"]
 layout_mode = 2
@@ -132,6 +148,12 @@ size_flags_horizontal = 4
 theme_override_styles/normal = SubResource("StyleBoxFlat_7mycd")
 text = "Record"
 
+[node name="MasterPlayButton" type="Button" parent="VBoxContainer/BottomArea"]
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 4
+text = "▶ 播放全曲"
+
 [node name="PreviewUI" type="HBoxContainer" parent="VBoxContainer/BottomArea"]
 visible = false
 layout_mode = 2
@@ -160,3 +182,9 @@ text = "✅"
 
 [node name="PlaybackTimer" type="Timer" parent="."]
 wait_time = 0.5
+
+[node name="PlaylistRequest" type="HTTPRequest" parent="."]
+
+[node name="SongDownloader" type="HTTPRequest" parent="."]
+
+[node name="Preloader" type="HTTPRequest" parent="."]
