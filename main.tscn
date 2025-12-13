@@ -60,6 +60,19 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_ig7tw")
 
+[node name="PlaybackSlider" type="HSlider" parent="."]
+layout_mode = 1
+anchors_preset = 5
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -344.0
+offset_top = 449.0
+offset_right = 736.0
+offset_bottom = 465.0
+grow_horizontal = 2
+scale = Vector2(0.764, 1.006)
+size_flags_vertical = 8
+
 [node name="VBoxContainer" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 15
@@ -87,7 +100,7 @@ theme_override_constants/separation = 100
 alignment = 1
 
 [node name="Rhythm_Track" type="Panel" parent="VBoxContainer/TracksMargin/TimelineScroll/TracksArea"]
-custom_minimum_size = Vector2(9480.889, 177.76666)
+custom_minimum_size = Vector2(7489.778, 140.43333)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
@@ -97,7 +110,7 @@ track_type = "rhythm"
 visible_grids = 60
 
 [node name="Vocal_Track" type="Panel" parent="VBoxContainer/TracksMargin/TimelineScroll/TracksArea"]
-custom_minimum_size = Vector2(9480.889, 177.76666)
+custom_minimum_size = Vector2(7489.778, 140.43333)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
@@ -106,7 +119,7 @@ script = ExtResource("2_0xm2m")
 visible_grids = 60
 
 [node name="SFX_Track" type="Panel" parent="VBoxContainer/TracksMargin/TimelineScroll/TracksArea"]
-custom_minimum_size = Vector2(8426.667, 158)
+custom_minimum_size = Vector2(7489.778, 140.43333)
 layout_mode = 2
 size_flags_horizontal = 3
 size_flags_vertical = 4
